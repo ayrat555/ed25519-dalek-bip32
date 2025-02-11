@@ -40,7 +40,7 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 
 /// An expanded secret key with chain code and meta data
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ExtendedSigningKey {
     /// How many derivations this key is from the root (0 for root)
     pub depth: u8,
@@ -60,7 +60,12 @@ pub type Result<T, E = Error> = core::result::Result<T, E>;
 impl ExtendedSigningKey {
     /// Create a new extended secret key from a seed
     pub fn from_seed(seed: &[u8]) -> Result<Self> {
-        let mut mac = HmacSha512::new_from_slice(ED25519_BIP32_NAME.as_ref()).unwrap();
+        Self::from_seed_with_custom_hmac_key(seed, ED25519_BIP32_NAME)
+    }
+
+    pub fn from_seed_with_custom_hmac_key(seed: &[u8], hmac_key: &str) -> Result<Self> {
+        let mut mac = HmacSha512::new_from_slice(hmac_key.as_ref()).unwrap();
+
         mac.update(seed);
         let bytes = mac.finalize().into_bytes();
 
@@ -202,6 +207,28 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(node.verifying_key().to_bytes(), public.to_bytes());
+    }
+
+    #[test]
+    fn custom_hmac_key() {
+        let seed = "000102030405060708090a0b0c0d0e0f";
+        let node1 = ExtendedSigningKey::from_seed(&hex_str(seed)).unwrap();
+
+        let node2 =
+            ExtendedSigningKey::from_seed_with_custom_hmac_key(&hex_str(seed), "hello").unwrap();
+
+        let node3 = ExtendedSigningKey::from_seed(&hex_str(seed)).unwrap();
+
+        let node4 =
+            ExtendedSigningKey::from_seed_with_custom_hmac_key(&hex_str(seed), "hello").unwrap();
+
+        let node5 =
+            ExtendedSigningKey::from_seed_with_custom_hmac_key(&hex_str(seed), "hi").unwrap();
+
+        assert_ne!(node1, node2);
+        assert_eq!(node1, node3);
+        assert_eq!(node2, node4);
+        assert_ne!(node2, node5);
     }
 
     #[test]
